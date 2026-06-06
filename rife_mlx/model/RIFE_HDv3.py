@@ -22,8 +22,11 @@ class Model:
                   timestep: float = 0.5, scale: float = 1.0) -> mx.array:
         """img0,img1: [N,H,W,3] in [0,1]. Returns the frame at `timestep`."""
         N, H, W, _ = img0.shape
-        ph = ((H - 1) // self.pad_to + 1) * self.pad_to
-        pw = ((W - 1) // self.pad_to + 1) * self.pad_to
+        # pad must scale with 1/scale so the coarsest-scale interpolation
+        # round-trips exactly (else the recovered flow size != padded size).
+        pad = max(self.pad_to, int(round(self.pad_to / scale)))
+        ph = ((H - 1) // pad + 1) * pad
+        pw = ((W - 1) // pad + 1) * pad
         pad = [(0, 0), (0, ph - H), (0, pw - W), (0, 0)]
         i0 = mx.pad(img0, pad)
         i1 = mx.pad(img1, pad)

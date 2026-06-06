@@ -39,6 +39,20 @@ def test_sequence_frame_count(model):
         assert len(out) == (len(frames) - 1) * multi + 1
 
 
+@pytest.mark.parametrize("H,W,scale", [
+    (1080, 1920, 0.5),   # regression: 1080 pads to 1088 at /64 but needs 1152 at scale 0.5
+    (1080, 1920, 0.25),
+    (721, 1281, 0.5),    # odd dims
+    (240, 320, 1.0),
+])
+def test_scale_padding_roundtrip(model, H, W, scale):
+    rng = np.random.default_rng(0)
+    a = (rng.random((H, W, 3)) * 255).astype(np.uint8)
+    b = np.roll(a, 4, axis=1)
+    out = interpolate_pair(model, a, b, 0.5, scale)
+    assert out.shape == (H, W, 3)
+
+
 def test_t_sweep_monotone_motion(model):
     img0, img1 = _bar_frame(16), _bar_frame(72)  # bar moves left->right
     def bar_x(frame):  # centroid column of the bright bar

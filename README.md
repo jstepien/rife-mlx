@@ -1,18 +1,16 @@
 # rife-mlx
 
-Apple **MLX** port of [Practical-RIFE](https://github.com/hzwer/Practical-RIFE) 4.x —
+Apple **MLX** port of [Practical-RIFE](https://github.com/hzwer/Practical-RIFE) 4.25 —
 real-time video **frame interpolation** on Apple Silicon. **MIT.**
 
 The first MLX / Apple-Silicon-native RIFE: torch-free inference, HF auto-download
 (upstream ships weights via Google Drive only), arbitrary-timestep interpolation,
-`--multi` Nx frame-rate, `--scale` pyramid for 4K, and audio-preserving video output.
+`--multi` Nx frame-rate, `--scale` pyramid for 4K, and **audio-preserving** video output.
 
-> **Status: P0 (scaffold).** The two crux ops (`grid_sample` warp + bilinear
-> `interpolate`) are written; IFNet arch translation, parity, weight conversion,
-> and the video pipeline are in progress. Pinned version: **RIFE 4.25**. See
-> [`docs/PREFLIGHT.md`](docs/PREFLIGHT.md).
+> **Status: network parity-locked + full pipeline working** (pinned **RIFE 4.25**).
+> Publishing to `mlx-community` is the remaining step. See [`docs/PREFLIGHT.md`](docs/PREFLIGHT.md).
 
-## Planned usage
+## Usage
 
 ```bash
 pip install rife-mlx
@@ -27,13 +25,54 @@ rife-mlx --img0 a.png --img1 b.png -t 0.5 -o mid.png
 rife-mlx -i 4k.mp4 -o out.mp4 --multi 2 --scale 0.5
 ```
 
-## Why a port
+Flags: `--multi N` (insert N-1 frames/pair, output fps ×N) · `-t` (image-pair timestep)
+· `--scale {0.25,0.5,1,2,4}` · `-n` version · `--weights_dir` local override.
 
-- **No MLX RIFE exists** — only ncnn-Vulkan / CoreML community builds.
-- Upstream weights are **Google-Drive-only**; this re-hosts RIFE 4.25 on
-  `mlx-community` (MIT + attribution) with HF auto-download and torch-free load.
-- The backward-`warp` (`grid_sample`) and bilinear `interpolate` are hand-rolled
-  in MLX/NHWC and parity-locked vs PyTorch.
+## Python
+
+```python
+from rife_mlx.utils.weights import build_model
+from rife_mlx.pipeline_mlx import interpolate_pair
+
+model = build_model("4.25")                 # auto-downloads from mlx-community
+mid = interpolate_pair(model, frame_a, frame_b, timestep=0.5)   # HWC uint8
+```
+
+## Parity
+
+The full IFNet is parity-locked vs PyTorch on CPU fp32 (the two hand-rolled crux ops —
+backward-`warp` `grid_sample` and bilinear `interpolate` — and the whole network):
+
+| Component | max_abs vs PyTorch |
+|---|---|
+| `warp` (grid_sample, border, align_corners) | 2.2e-6 |
+| bilinear `interpolate` | 1.2e-7 |
+| **full IFNet interpolation** | **1.43e-3** |
+
+Shipped **fp32** (22.7 MB): RIFE's coarse-to-fine flow accumulation is fp16-sensitive
+(fp16 diverged to 3.1e-2), and the net is tiny, so there's no reason to quantize.
+
+## Benchmarks (M5 Max, fp32, GPU)
+
+Single mid-frame `inference`, mean of 3:
+
+| Resolution | scale 1.0 | scale 0.5 |
+|---|---|---|
+| 480p | 168 ms | 135 ms |
+| 720p | 260 ms | 258 ms |
+| 1080p | 554 ms | 581 ms |
+| 4K | 2112 ms | 2019 ms |
+
+See [`docs/REPORT.md`](docs/REPORT.md).
+
+## How it works
+
+- **IFNet** (5 coarse-to-fine IFBlocks, LeakyReLU, ResConv+beta, Head encoder,
+  ConvTranspose+PixelShuffle) translated 1:1 from the bundled v4.25 source (NHWC).
+- **`warp`** (backward `grid_sample`, border pad, align_corners=True) and bilinear
+  **`interpolate`** are hand-rolled in MLX — no native ops — and parity-locked.
+- Weights converted from `flownet.pkl` (Google-Drive-only) to safetensors, re-hosted
+  on `mlx-community` with HF auto-download + torch-free load.
 
 ## License
 
