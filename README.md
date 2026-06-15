@@ -7,13 +7,14 @@ The first MLX / Apple-Silicon-native RIFE: torch-free inference, HF auto-downloa
 (upstream ships weights via Google Drive only), arbitrary-timestep interpolation,
 `--multi` Nx frame-rate, `--scale` pyramid for 4K, and **audio-preserving** video output.
 
-> **Status: network parity-locked + full pipeline working** (pinned **RIFE 4.25**).
-> Publishing to `mlx-community` is the remaining step. See [`docs/PREFLIGHT.md`](docs/PREFLIGHT.md).
+> **Status: network parity-locked + full pipeline working** (pinned **RIFE 4.25**;
+> only version currently in the registry). Publishing to `mlx-community/RIFE-4.25` is the
+> remaining step. See [`docs/PREFLIGHT.md`](docs/PREFLIGHT.md).
 
 ## Usage
 
 ```bash
-pip install rife-mlx
+pip install -e .            # runtime: mlx, numpy, pillow, huggingface_hub, av (no torch)
 
 # 2× frame rate, keep audio
 rife-mlx -i input.mp4 -o output.mp4 --multi 2
@@ -25,17 +26,20 @@ rife-mlx --img0 a.png --img1 b.png -t 0.5 -o mid.png
 rife-mlx -i 4k.mp4 -o out.mp4 --multi 2 --scale 0.5
 ```
 
-Flags: `--multi N` (insert N-1 frames/pair, output fps ×N) · `-t` (image-pair timestep)
-· `--scale {0.25,0.5,1,2,4}` · `-n` version · `--weights_dir` local override.
+Flags: `-m`/`--multi N` (insert N-1 frames/pair, output fps ×N) · `-t`/`--timestep`
+(image-pair timestep) · `-s`/`--scale {0.25,0.5,1.0,2.0,4.0}` · `-n`/`--version`
+(default `4.25`) · `--weights_dir` local override. `-o`/`--output` is required.
 
 ## Python
 
 ```python
 from rife_mlx.utils.weights import build_model
-from rife_mlx.pipeline_mlx import interpolate_pair
+from rife_mlx.pipeline_mlx import interpolate_pair, interpolate_sequence
 
-model = build_model("4.25")                 # auto-downloads from mlx-community
+model = build_model("4.25")                                  # auto-downloads from mlx-community
 mid = interpolate_pair(model, frame_a, frame_b, timestep=0.5)   # HWC uint8
+# whole list of HWC uint8 frames -> multi-1 inserted per pair:
+frames_out = interpolate_sequence(model, frames, multi=2, scale=1.0)
 ```
 
 ## Parity
@@ -67,12 +71,14 @@ See [`docs/REPORT.md`](docs/REPORT.md).
 
 ## How it works
 
-- **IFNet** (5 coarse-to-fine IFBlocks, LeakyReLU, ResConv+beta, Head encoder,
-  ConvTranspose+PixelShuffle) translated 1:1 from the bundled v4.25 source (NHWC).
-- **`warp`** (backward `grid_sample`, border pad, align_corners=True) and bilinear
-  **`interpolate`** are hand-rolled in MLX — no native ops — and parity-locked.
+- **IFNet** (5 coarse-to-fine IFBlocks, channels [192,128,96,64,32], LeakyReLU(0.2),
+  ResConv+beta, Head encoder, ConvTranspose+PixelShuffle) translated 1:1 from the bundled
+  v4.25 source (NHWC). `F.interpolate` uses `align_corners=False`; `warp` grid_sample uses
+  `align_corners=True`, border padding.
+- **`warp`** (backward `grid_sample`) and bilinear **`interpolate`** are hand-rolled in MLX
+  — no native ops — and parity-locked.
 - Weights converted from `flownet.pkl` (Google-Drive-only) to safetensors, re-hosted
-  on `mlx-community` with HF auto-download + torch-free load.
+  on `mlx-community/RIFE-4.25` with HF auto-download + torch-free load.
 
 ## License
 
