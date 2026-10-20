@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 
 import mlx.core as mx
 import numpy as np
@@ -105,8 +106,11 @@ def cli_main() -> None:
         print(f"{args.img0} + {args.img1} @t={args.timestep} -> {args.output} {mid.shape}")
         return
 
-    from .video import VideoWriter, iter_frames, probe_fps
-    fps = probe_fps(args.input)
+    from tqdm import tqdm
+
+    from .video import VideoWriter, iter_frames, probe_video
+    fps, frame_count = probe_video(args.input)
+    total = (frame_count - 1) * args.multi + 1 if frame_count is not None else None
     input_count = 0
 
     def counted(frames):
@@ -115,10 +119,15 @@ def cli_main() -> None:
             input_count += 1
             yield frame
 
-    with VideoWriter(args.output, fps * args.multi, audio_from=args.input) as writer:
-        for frame in interpolate_stream(model, counted(iter_frames(args.input)),
-                                        args.multi, args.scale):
-            writer.write(frame)
+    with tqdm(total=total, desc="Interpolating", unit="frame", file=sys.stderr,
+              disable=not sys.stderr.isatty(), dynamic_ncols=True) as progress:
+        with VideoWriter(args.output, fps * args.multi, audio_from=args.input) as writer:
+            for frame in interpolate_stream(model, counted(iter_frames(args.input)),
+                                            args.multi, args.scale):
+                writer.write(frame)
+                progress.update(1)
+            progress.set_description("Finalising audio")
+        progress.set_description("Done")
     print(f"{args.input} ({input_count}f @{fps:.2f}) -> {args.output} "
           f"({writer.frames_written}f @{fps * args.multi:.2f}, audio passthrough)")
 

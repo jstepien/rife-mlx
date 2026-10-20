@@ -12,6 +12,7 @@ dependencies = [
     "huggingface_hub",
     "pillow",
     "av",                 # video decode/encode (PyAV)
+    "tqdm",               # CLI progress reporting
 ]
 
 [project.optional-dependencies]

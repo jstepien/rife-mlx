@@ -11,14 +11,20 @@ from collections.abc import Iterable, Iterator
 import numpy as np
 
 
-def probe_fps(path: str) -> float:
+def probe_video(path: str) -> tuple[float, int | None]:
+    """Return the source fps and container-reported frame count, if available."""
     import av
 
     with av.open(path) as container:
         if not container.streams.video:
             raise ValueError(f"no video stream in {path}")
         stream = container.streams.video[0]
-        return float(stream.average_rate) if stream.average_rate else 30.0
+        fps = float(stream.average_rate) if stream.average_rate else 30.0
+        return fps, stream.frames if stream.frames > 0 else None
+
+
+def probe_fps(path: str) -> float:
+    return probe_video(path)[0]
 
 
 def iter_frames(path: str) -> Iterator[np.ndarray]:
